@@ -1,61 +1,76 @@
 '''
 Author: bin.zhu
-Date: 2022-06-29 17:07:22
+Date: 2022-06-29 17:54:44
 LastEditors: bin.zhu
-LastEditTime: 2022-06-29 17:40:01
+LastEditTime: 2022-07-04 13:43:20
 Description: file content
 '''
 
-from torchdata.datapipes.map import MapDataPipe
-
-import csv
-import random
-
-# def generate_csv(file_label,
-#                  num_rows: int = 5000,
-#                  num_features: int = 20) -> None:
-#     fieldnames = ['label'] + [f'c{i}' for i in range(num_features)]
-#     writer = csv.DictWriter(open(f"sample_data{file_label}.csv", "w"),
-#                             fieldnames=fieldnames)
-#     writer.writerow({col: col for col in fieldnames})  # writing the header row
-#     for i in range(num_rows):
-#         row_data = {col: random.random() for col in fieldnames}
-#         row_data['label'] = random.randint(0, 9)
-#         writer.writerow(row_data)
-
-# num_files_to_generate = 3
-# for i in range(num_files_to_generate):
-#     generate_csv(file_label=i)
-
-import numpy as np
+from ctypes import util
+import cv2
 import torchdata.datapipes as dp
+import image_utils
+from utils.util import load_polyGonAnnotations, get_polyGon_target
+from data_generator.heatmap import PolyGonHeatmapGenerator
+
+page_anno_dir = '/home/albin/Documents/data/annoDir/page_label/'
 
 
-def build_datapipes(root_dir="."):
-    # 获取所有文件
-    datapipe = dp.iter.FileLister(root_dir)
-    # 筛选csv文件
-    datapipe = datapipe.filter(filter_fn=lambda filename: "sample_data" in
-                               filename and filename.endswith(".csv"))
-    # 打开文件，FileOpener没有对应的函数格式，如果安装了iopath，可以使用
-    # datapipe = datapipe.open_by_iopath(mode='rt')
-    datapipe = dp.iter.FileOpener(datapipe, mode='rt')
-    # 解析csv
-    datapipe = datapipe.parse_csv(delimiter=",", skip_lines=1)
-    # 分离label和特征
-    datapipe = datapipe.map(
-        lambda row: {
-            "label": np.array(row[0], np.int32),
-            "data": np.array(row[1:], dtype=np.float64)
-        })
-    return datapipe
+def DataPipe(anno_file: str):
+    common_aug_method = image_utils.VisualEffect(
+        image_utils.configUtils(True, True, True, True, True, True, True))
+    preprocess = image_utils.polyGonProcessImage()
+    heatmap_option = {
+        "heat_H": 256,
+        "heat_W": 256,
+        "sigma": 5,
+    }
+    heatmap = PolyGonHeatmapGenerator(8, **heatmap_option)
+    anno_files = []
+    with open(anno_file, 'r') as f:
+        anno_files = f.read().splitlines()
+
+    assert len(anno_file) > 0, 'anno_file must exists.'
+    anno_iter = dp.iter.IterableWrapper(anno_files)
+
+    # print(list(anno_iter))
+
+    # def getAnno(imageFile: str):
+    #     filename = page_anno_dir + imageFile.split('/')[-1].replace(
+    #         '.jpg', '.txt')
+    #     with open(filename, 'r') as f:
+    #         anno = f.read().splitlines()
+    #     assert anno is not None
+    #     return anno
+
+    # def getImage(imageFile: str):
+
+    #     img = cv2.imread(imageFile)
+    #     img = common_aug_method(img)
+
+    def dataProcess(imageFile: str):
+        img = cv2.imread(imageFile)
+        img = common_aug_method(img)
+
+        anno_file = page_anno_dir + imageFile.split('/')[-1].replace(
+            '.jpg', '.txt')
+        anno = load_polyGonAnnotations(anno_file)
+        processed_image, points = preprocess(
+            img, 1024, image_utils.ProcessType.ENCODE_ANNO, anno["points"])
+
+        anno['points'] = points
+        batch_annos, batch_labels, batch_reg = get_polyGon_target(
+            anno, (heatmap.heat_h, heatmap.heat_w))
+        batch_heatmap = heatmap.generate_heatmap_anno(anno)
+
+        return processed_image, (batch_labels, batch_reg, batch_heatmap)
+
+    datapipe = anno_iter.map(lambda row: dataProcess(row))
+    print(list(datapipe)[0])
 
 
-datapipe = build_datapipes()
-from torch.utils.data import DataLoader
+if __name__ == "__main__":
+    train_file = "/home/albin/Documents/data/annoDir/ImageSet/page_trainval.txt"
+    val_file = "/home/albin/Documents/data/annoDir/ImageSet/page_val.txt"
 
-dl = DataLoader(dataset=datapipe, batch_size=50, shuffle=True)
-first = next(iter(dl))
-labels, features = first['label'], first['data']
-print(f"Labels batch shape: {labels.size()}")
-print(f"Feature batch shape: {features.size()}")
+    DataPipe(train_file)
