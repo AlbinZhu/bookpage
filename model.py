@@ -2,7 +2,7 @@
 Author: bin.zhu
 Date: 2022-06-28 15:54:40
 LastEditors: bin.zhu
-LastEditTime: 2022-06-29 16:02:23
+LastEditTime: 2022-07-06 13:57:03
 Description: file content
 '''
 
@@ -104,7 +104,7 @@ class AuxiliaryHeatmapNet(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.conv = nn.ConvTranspose2d(512, 2, 3, 2, (1, 1))
+        self.conv = nn.ConvTranspose2d(512, 8, 3, 2, (1, 1), 1)
 
     def forward(self, x):
         output = self.conv(x)

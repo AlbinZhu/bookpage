@@ -2,7 +2,7 @@
 Author: bin.zhu
 Date: 2022-06-28 17:20:48
 LastEditors: bin.zhu
-LastEditTime: 2022-06-29 16:04:33
+LastEditTime: 2022-07-06 14:35:42
 Description: file content
 '''
 
@@ -25,7 +25,6 @@ class ChannelAttentionModule(nn.Module):
 
     def forward(self, x):
         avgout = self.shared_MLP(self.avg_pool(x))
-        print(avgout.shape)
         maxout = self.shared_MLP(self.max_pool(x))
         return self.sigmoid(avgout + maxout)
 

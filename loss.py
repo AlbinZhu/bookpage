@@ -2,7 +2,7 @@
 Author: bin.zhu
 Date: 2022-07-04 14:38:58
 LastEditors: bin.zhu
-LastEditTime: 2022-07-04 18:01:42
+LastEditTime: 2022-07-06 17:32:09
 Description: file content
 '''
 
@@ -15,15 +15,15 @@ class CLSSigmoid(nn.Module):
 
     def __init__(self, cls_weights) -> None:
         super().__init__()
-        self.weight = cls_weights
+        self.weight = torch.tensor(cls_weights)
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
         normalizer = float(target.shape[0])
-        normalizer = torch.maximum(1.0, normalizer)
+        normalizer = torch.maximum(torch.tensor(1.0), torch.tensor(normalizer))
         labels = target.reshape(target.shape[0], -1, 1)
         input = input.reshape(input.shape[0], -1, 1)
-        bce_loss = F.binary_cross_entropy_with_logits(labels,
-                                                      input,
+        bce_loss = F.binary_cross_entropy_with_logits(input,
+                                                      labels,
                                                       self.weight,
                                                       reduction="sum")
         loss = bce_loss / normalizer
@@ -40,14 +40,16 @@ class RegLoss(nn.Module):
         regression = torch.reshape(input, (input.shape[0], -1, 2))
         regression_target = target[:, :, :-1]
         anchor_state = target[:, :, -1]
-
-        label_mask = torch.where(anchor_state == 1)
+        label_mask = (anchor_state == 1).unsqueeze(2)
         labels = torch.masked_select(regression_target, label_mask)
-        regression_indices = labels[..., 2:4].int()
+        labels = labels.view(-1, 3)
+
+        batch_index = torch.nonzero(label_mask)[:, 0]
+        regression_indices = labels[..., 2].long()
         regression_target = labels[..., 0:2]
-        regression = torch.masked_select(regression, regression_indices)
+        regression = regression[batch_index, regression_indices]
         normalizer = float(regression_indices.shape[0])
-        normalizer = torch.maximum(1.0, normalizer)
+        normalizer = torch.maximum(torch.tensor(1.0), torch.tensor(normalizer))
         poly_loss = F.smooth_l1_loss(regression,
                                      regression_target,
                                      reduction='sum')
@@ -66,23 +68,29 @@ class HeatmapFocalLoss(nn.Module):
 
     def forward(self, input: torch.Tensor,
                 target: torch.Tensor) -> torch.Tensor:
-        target = torch.reshape(target(-1, self.num_channels))
-        input = torch.reshape(input(-1, self.num_channels))
+        target = torch.reshape(target, (-1, self.num_channels))
+        input = torch.reshape(input, (-1, self.num_channels))
 
         labels_shape = target.shape
         batches = labels_shape[0]
         focal_weight = torch.where(target == 1, (1 - input)**self.alpha,
                                    ((1 - target)**self.beta) *
-                                   (input**self.alpha))
+                                   (input**self.alpha)).detach()
         labels = torch.reshape(target, [batches, -1, 1])
         classification = torch.reshape(input, [batches, -1, 1])
 
-        bce_loss = F.binary_cross_entropy_with_logits(classification,
-                                                      labels,
-                                                      weight=focal_weight,
-                                                      reduction='sum')
-
-        positive_indices = torch.where(target == 1.0)
+        bce_loss = F.binary_cross_entropy_with_logits(
+            classification,
+            labels,
+            weight=focal_weight.unsqueeze(2),
+            reduction='sum')
+        # bce_loss = F.binary_cross_entropy(
+        #     classification,
+        #     labels,
+        #     #   torch.tensor(1),
+        #     reduction='none')
+        # positive_indices = torch.where(target == 1.0)
+        positive_indices = torch.nonzero(target == 1.0)
         normalizer = float(positive_indices.shape[0])
         bce_loss = bce_loss / normalizer
         return bce_loss
