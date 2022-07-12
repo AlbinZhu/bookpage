@@ -2,11 +2,11 @@
 Author: bin.zhu
 Date: 2022-06-28 15:54:40
 LastEditors: bin.zhu
-LastEditTime: 2022-07-06 13:57:03
+LastEditTime: 2022-07-12 15:46:00
 Description: file content
 '''
 
-from numpy import pad
+from numpy import int64, pad
 import torch
 import torch.nn as nn
 import timm
@@ -36,7 +36,66 @@ class PageNet(nn.Module):
         reg = self.regression(attention)
         heatmap = self.heatmap(attention)
 
-        return [cls, reg, heatmap]
+        if self.train:
+            return [cls, reg, heatmap]
+        else:
+            return self.__getOutput(cls, reg, heatmap)
+
+    def __getOutput(self, cls, reg, heatmaps):
+        batchsize = cls.shape[0]
+        num_channels = 8
+        score_threshold = 0.6
+        down_scale = 4
+        results = []
+        for i in range(batchsize):
+            labels = cls[i]
+            offset = reg[i]
+            heatmap = heatmaps[i]
+
+            [feat_h, feat_w] = heatmap.shape[:2]
+            reshape_heatmap = torch.reshape(heatmap, (-1, num_channels))
+            left_heat = reshape_heatmap[..., :4]
+            right_heat = reshape_heatmap[..., 4:]
+            new_heapmap = torch.stack([left_heat, right_heat], 0)
+            label_indices = torch.nonzero(labels > score_threshold)
+            if label_indices.shape[0] == 0:
+                return torch.ones((2, 9)) * -1
+
+            pred_heat = torch.masked_select(new_heapmap, label_indices)
+            pred_argmax_index = torch.argmax(pred_heat, -2)
+
+            feat_h = int64(feat_h)
+            feat_w = int64(feat_w)
+
+            y_index = pred_argmax_index // feat_w
+            x_index = pred_argmax_index % feat_w
+
+            point_indices = torch.stack([y_index, x_index], -1)
+            regression = torch.masked_select(offset, point_indices)
+
+            x = (regression[..., 0] + x_index.int()) * down_scale
+            y = (regression[..., 1] + y_index.int()) * down_scale
+
+            img_h, img_w = feat_h * down_scale, feat_w * down_scale
+            x = x / img_w
+            y = y / img_h
+
+            x = torch.clip(x, 0, 1)
+            y = torch.clip(y, 0, 1)
+
+            label_indices = label_indices.float()
+            pred_points = torch.concat([label_indices, x, y], -1)
+
+            if label_indices.shape[0] == 1:
+                pads = torch.ones((1, 9)) * -1
+                pred_points = torch.concat([pred_points, pads], -2)
+
+            results.append(pred_points)
+
+        results = torch.stack(results, dim=1)
+        return results
+
+
 
 
 class CommonHead(nn.Module):
