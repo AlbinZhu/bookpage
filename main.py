@@ -2,7 +2,7 @@
 Author: Albin
 Date: 2022-06-29 17:54:44
 LastEditors: Albin
-LastEditTime: 2022-07-14 18:57:35
+LastEditTime: 2022-07-14 19:07:23
 FilePath: /bookpage/main.py
 '''
 from asyncio.log import logger
@@ -23,10 +23,11 @@ parser.add_argument('--page_anno_dir', type=str, required=True)
 parser.add_argument('--bs', type=int, default=10)
 parser.add_argument('--lr', type=float, default=0.0025)
 parser.add_argument('--epochs', type=int, default=100)
+parser.add_argument('--num_workers', type=int, default=4)
 args = parser.parse_args()
 
 train_dataset = BookPage(args.train_file, args.page_anno_dir)
-train_dataloader = DataLoader(train_dataset, args.bs, True, num_workers=1)
+train_dataloader = DataLoader(train_dataset, args.bs, True, num_workers=args.num_workers)
 
 model = PageNet().cuda()
 optimizer = torch.optim.AdamW(model.parameters(), args.lr)
