@@ -1,19 +1,35 @@
+'''
+Author: Albin
+Date: 2022-06-29 17:54:44
+LastEditors: Albin
+LastEditTime: 2022-07-14 18:57:35
+FilePath: /bookpage/main.py
+'''
 from asyncio.log import logger
 from matplotlib.colors import to_rgba_array
 import numpy as np
+from sympy import arg, re
 import torch
 from dataset import BookPage
 from model import PageNet
 from torch.utils.data import DataLoader
 from loss import CLSSigmoid, RegLoss, HeatmapFocalLoss
 from log import get_logger
+import argparse
 
-train_dataset = BookPage(
-    '/home/albin/Documents/data/annoDir/ImageSet/page_trainval.txt')
-train_dataloader = DataLoader(train_dataset, 2, True, num_workers=1)
+parser = argparse.ArgumentParser(description='training')
+parser.add_argument('--train_file', type=str, required=True)
+parser.add_argument('--page_anno_dir', type=str, required=True)
+parser.add_argument('--bs', type=int, default=10)
+parser.add_argument('--lr', type=float, default=0.0025)
+parser.add_argument('--epochs', type=int, default=100)
+args = parser.parse_args()
+
+train_dataset = BookPage(args.train_file, args.page_anno_dir)
+train_dataloader = DataLoader(train_dataset, args.bs, True, num_workers=1)
 
 model = PageNet().cuda()
-optimizer = torch.optim.AdamW(model.parameters(), 0.0025)
+optimizer = torch.optim.AdamW(model.parameters(), args.lr)
 
 cls_loss_func = CLSSigmoid(1.0)
 reg_loss_func = RegLoss(1.0)
@@ -22,8 +38,7 @@ heatmap_loss_func = HeatmapFocalLoss(8)
 logger = get_logger("log/train.log")
 logger.info("Starting training...")
 model.train()
-epoch = 50
-for i in range(epoch):
+for i in range(args.epochs):
     logger.info("Epoch {}".format(i + 1))
     total = []
     cls_total = []
@@ -56,9 +71,9 @@ for i in range(epoch):
                 "Setp: {} CLS_loss: {} reg_loss: {} heatmap_loss: {} Total: {}"
                 .format(j, np.mean(cls_total), np.mean(reg_total),
                         np.mean(heatmap_total), np.mean(total)))
-            cls = []
-            reg = []
-            heatmap = []
+            cls_total = []
+            reg_total = []
+            heatmap_total = []
             total = []
     # train_loss = np.mean(train_loss)
 

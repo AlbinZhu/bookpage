@@ -1,8 +1,8 @@
 '''
 Author: bin.zhu
 Date: 2022-07-04 14:38:58
-LastEditors: bin.zhu
-LastEditTime: 2022-07-06 17:32:09
+LastEditors: Albin
+LastEditTime: 2022-07-14 18:27:19
 Description: file content
 '''
 
@@ -15,17 +15,14 @@ class CLSSigmoid(nn.Module):
 
     def __init__(self, cls_weights) -> None:
         super().__init__()
-        self.weight = torch.tensor(cls_weights)
+        self.weight = torch.tensor(cls_weights).cuda()
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
         normalizer = float(target.shape[0])
         normalizer = torch.maximum(torch.tensor(1.0), torch.tensor(normalizer))
         labels = target.reshape(target.shape[0], -1, 1)
         input = input.reshape(input.shape[0], -1, 1)
-        bce_loss = F.binary_cross_entropy_with_logits(input,
-                                                      labels,
-                                                      self.weight,
-                                                      reduction="sum")
+        bce_loss = F.binary_cross_entropy(input, labels, self.weight, reduction="sum")
         loss = bce_loss / normalizer
         return loss
 
@@ -37,7 +34,7 @@ class RegLoss(nn.Module):
         self.weight = poly_weight
 
     def forward(self, input, target):
-        regression = torch.reshape(input, (input.shape[0], -1, 2))
+        regression = torch.reshape(input, (input.shape[0], 2, -1))
         regression_target = target[:, :, :-1]
         anchor_state = target[:, :, -1]
         label_mask = (anchor_state == 1).unsqueeze(2)
@@ -47,7 +44,7 @@ class RegLoss(nn.Module):
         batch_index = torch.nonzero(label_mask)[:, 0]
         regression_indices = labels[..., 2].long()
         regression_target = labels[..., 0:2]
-        regression = regression[batch_index, regression_indices]
+        regression = regression[batch_index,:, regression_indices]
         normalizer = float(regression_indices.shape[0])
         normalizer = torch.maximum(torch.tensor(1.0), torch.tensor(normalizer))
         poly_loss = F.smooth_l1_loss(regression,
@@ -69,7 +66,8 @@ class HeatmapFocalLoss(nn.Module):
     def forward(self, input: torch.Tensor,
                 target: torch.Tensor) -> torch.Tensor:
         target = torch.reshape(target, (-1, self.num_channels))
-        input = torch.reshape(input, (-1, self.num_channels))
+        # input1 = torch.reshape(input, (-1, self.num_channels))
+        input = torch.reshape(torch.permute(input, (0, 2, 3, 1)),(-1, self.num_channels))
 
         labels_shape = target.shape
         batches = labels_shape[0]
@@ -79,7 +77,7 @@ class HeatmapFocalLoss(nn.Module):
         labels = torch.reshape(target, [batches, -1, 1])
         classification = torch.reshape(input, [batches, -1, 1])
 
-        bce_loss = F.binary_cross_entropy_with_logits(
+        bce_loss = F.binary_cross_entropy(
             classification,
             labels,
             weight=focal_weight.unsqueeze(2),

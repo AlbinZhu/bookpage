@@ -1,8 +1,8 @@
 '''
 Author: bin.zhu
 Date: 2022-06-28 15:54:40
-LastEditors: bin.zhu
-LastEditTime: 2022-07-12 15:46:00
+LastEditors: Albin
+LastEditTime: 2022-07-14 18:10:09
 Description: file content
 '''
 
@@ -12,7 +12,6 @@ import torch.nn as nn
 import timm
 import torch.functional as F
 from cabm import CBAM
-
 
 class PageNet(nn.Module):
 
@@ -26,7 +25,7 @@ class PageNet(nn.Module):
         self.regression = PageRegressionNet()
         self.heatmap = AuxiliaryHeatmapNet()
         self.cbam = CBAM(512)
-
+        self.activ = nn.Sigmoid()
     def forward(self, x):
         x = self.backbone(x)
         feature = x[2]
@@ -36,7 +35,7 @@ class PageNet(nn.Module):
         reg = self.regression(attention)
         heatmap = self.heatmap(attention)
 
-        if self.train:
+        if self.training:
             return [cls, reg, heatmap]
         else:
             return self.__getOutput(cls, reg, heatmap)
@@ -45,14 +44,14 @@ class PageNet(nn.Module):
         batchsize = cls.shape[0]
         num_channels = 8
         score_threshold = 0.6
-        down_scale = 4
+        down_scale = 8
         results = []
         for i in range(batchsize):
             labels = cls[i]
             offset = reg[i]
             heatmap = heatmaps[i]
 
-            [feat_h, feat_w] = heatmap.shape[:2]
+            [feat_h, feat_w] = heatmap.shape[1:]
             reshape_heatmap = torch.reshape(heatmap, (-1, num_channels))
             left_heat = reshape_heatmap[..., :4]
             right_heat = reshape_heatmap[..., 4:]
@@ -61,20 +60,46 @@ class PageNet(nn.Module):
             if label_indices.shape[0] == 0:
                 return torch.ones((2, 9)) * -1
 
-            pred_heat = torch.masked_select(new_heapmap, label_indices)
+            pred_heat = new_heapmap[label_indices.squeeze()]
             pred_argmax_index = torch.argmax(pred_heat, -2)
+
+            # offset2 = torch.reshape(offset, (offset.shape[0], -1))
+            # index = offset2[pred_argmax_index]
+
 
             feat_h = int64(feat_h)
             feat_w = int64(feat_w)
 
+            pred_argmax_index = torch.flatten(pred_argmax_index)
+
             y_index = pred_argmax_index // feat_w
             x_index = pred_argmax_index % feat_w
 
-            point_indices = torch.stack([y_index, x_index], -1)
-            regression = torch.masked_select(offset, point_indices)
+            # point_indices = torch.stack([y_index, x_index], 0)
+            # point_indices2 = list(torch.split(point_indices, 1, 1))
+            # point_indices2 = [x.squeeze() for x in point_indices2]
+            # regression1 = torch.take(offset, point_indices)
 
-            x = (regression[..., 0] + x_index.int()) * down_scale
-            y = (regression[..., 1] + y_index.int()) * down_scale
+            
+            offset = torch.reshape(offset, (2, -1))
+            regression = offset.index_select(1, pred_argmax_index)
+            # regression = regression.view(-1, 4)
+
+            # regression = []
+            # for point in point_indices2:
+            #     regression.append(offset[:, point[1], point[0]])
+            # regression = torch.stack(regression, 1)
+            # regression = [offset[:, x] for x in point_indices2]
+            # regression2 = offset[:, point_indices2[0]]
+            # a = regression[-1][-1]
+            # b = offset[1, y_index[1][-1], x_index[1][-1]]
+            # b1 = offset[1][point_indices[-1][-1][0], [point_indices[-1][-1][1]]]
+            # c = (a == b)
+            # print(a)
+            # regression = offset[list[point_indices.T]]
+
+            x = (regression[0] + x_index.int()) * down_scale
+            y = (regression[1] + y_index.int()) * down_scale
 
             img_h, img_w = feat_h * down_scale, feat_w * down_scale
             x = x / img_w
@@ -82,6 +107,9 @@ class PageNet(nn.Module):
 
             x = torch.clip(x, 0, 1)
             y = torch.clip(y, 0, 1)
+
+            x = torch.reshape(x, (-1, 4))
+            y = torch.reshape(y, (-1, 4))
 
             label_indices = label_indices.float()
             pred_points = torch.concat([label_indices, x, y], -1)
@@ -92,7 +120,7 @@ class PageNet(nn.Module):
 
             results.append(pred_points)
 
-        results = torch.stack(results, dim=1)
+        results = torch.stack(results, dim=0)
         return results
 
 
@@ -130,6 +158,7 @@ class PageClassifyNet(nn.Module):
         self.flatten = nn.Flatten()
         self.dense = nn.Linear(1024, 2)
         self.acti = nn.Hardswish()
+        self.out = nn.Sigmoid()
 
     def forward(self, x):
         output = self.conv(x)
@@ -138,6 +167,7 @@ class PageClassifyNet(nn.Module):
         output = self.classifier(output)
         output = self.flatten(output)
         output = self.dense(output)
+        output = self.out(output)
         return output
 
 
@@ -164,9 +194,11 @@ class AuxiliaryHeatmapNet(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.conv = nn.ConvTranspose2d(512, 8, 3, 2, (1, 1), 1)
+        self.out = nn.Sigmoid()
 
     def forward(self, x):
         output = self.conv(x)
+        output = self.out(output)
         return output
 
 

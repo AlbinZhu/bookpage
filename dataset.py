@@ -1,8 +1,8 @@
 '''
 Author: bin.zhu
 Date: 2022-07-05 13:50:56
-LastEditors: bin.zhu
-LastEditTime: 2022-07-05 14:58:12
+LastEditors: Albin
+LastEditTime: 2022-07-14 18:57:06
 Description: file content
 '''
 
@@ -13,15 +13,14 @@ from torch.utils.data import Dataset
 import image_utils
 import cv2
 
-page_anno_dir = '/home/albin/Documents/data/annoDir/page_label/'
-
 
 class BookPage(Dataset):
 
-    def __init__(self, anno_file):
+    def __init__(self, anno_file, page_anno_dir):
         super(BookPage, self).__init__()
         with open(anno_file, 'r') as f:
             self.anno_files = f.read().splitlines()
+            self.page_anno_dir = page_anno_dir
 
         self.common_aug_method = image_utils.VisualEffect(
             image_utils.configUtils(True, True, True, True, True, True, True))
@@ -41,7 +40,7 @@ class BookPage(Dataset):
         img = cv2.imread(image_file)
         img = self.common_aug_method(img)
 
-        anno_file = page_anno_dir + image_file.split('/')[-1].replace(
+        anno_file = self.page_anno_dir + image_file.split('/')[-1].replace(
             '.jpg', '.txt')
         anno = load_polyGonAnnotations(anno_file)
         processed_image, points = self.preprocess(
