@@ -2,11 +2,10 @@
 Author: Albin
 Date: 2022-06-29 17:54:44
 LastEditors: Albin
-LastEditTime: 2022-07-14 19:07:23
+LastEditTime: 2022-07-15 11:26:26
 FilePath: /bookpage/main.py
 '''
 from asyncio.log import logger
-from matplotlib.colors import to_rgba_array
 import numpy as np
 from sympy import arg, re
 import torch
@@ -16,6 +15,7 @@ from torch.utils.data import DataLoader
 from loss import CLSSigmoid, RegLoss, HeatmapFocalLoss
 from log import get_logger
 import argparse
+from pathlib import Path
 
 parser = argparse.ArgumentParser(description='training')
 parser.add_argument('--train_file', type=str, required=True)
@@ -36,6 +36,10 @@ cls_loss_func = CLSSigmoid(1.0)
 reg_loss_func = RegLoss(1.0)
 heatmap_loss_func = HeatmapFocalLoss(8)
 
+ckpt_dir = Path('ckpt')
+if not ckpt_dir.exists():
+    ckpt_dir.mkdir()
+
 logger = get_logger("log/train.log")
 logger.info("Starting training...")
 model.train()
@@ -51,7 +55,7 @@ for i in range(args.epochs):
         reg_t = reg_t.cuda()
         heatmap_t = heatmap_t.cuda()
         optimizer.zero_grad()
-        [cls, reg, heatmap] = model(data.cuda())
+        [cls, reg, heatmap] = model(data)
         cls_loss = cls_loss_func(cls, cls_t)
         reg_loss = reg_loss_func(reg, reg_t)
         heatmap_loss = heatmap_loss_func(heatmap, heatmap_t)
@@ -78,5 +82,8 @@ for i in range(args.epochs):
             total = []
     # train_loss = np.mean(train_loss)
 
-torch.save(model.state_dict(), "model.pth")
+    if (i + 1) % 10 == 0:
+        torch.save(model.state_dict(), "{}/model-epoch{}.pth".format(ckpt_dir.name, i + 1))
+
+torch.save(model.state_dict(), "fian-model.pth")
 logger.info("Finish training")

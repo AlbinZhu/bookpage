@@ -2,7 +2,7 @@
 Author: bin.zhu
 Date: 2022-06-28 15:54:40
 LastEditors: Albin
-LastEditTime: 2022-07-14 18:10:09
+LastEditTime: 2022-07-15 10:36:43
 Description: file content
 '''
 
@@ -52,7 +52,7 @@ class PageNet(nn.Module):
             heatmap = heatmaps[i]
 
             [feat_h, feat_w] = heatmap.shape[1:]
-            reshape_heatmap = torch.reshape(heatmap, (-1, num_channels))
+            reshape_heatmap = torch.reshape(heatmap, (num_channels, -1)).permute(1, 0)
             left_heat = reshape_heatmap[..., :4]
             right_heat = reshape_heatmap[..., 4:]
             new_heapmap = torch.stack([left_heat, right_heat], 0)
@@ -180,12 +180,14 @@ class PageRegressionNet(nn.Module):
         self.bn = nn.BatchNorm2d(32)
         self.acti = nn.Hardswish()
         self.regression = nn.Conv2d(32, 2, 3, 1, 1)
+        self.out = nn.Sigmoid()
 
     def forward(self, x):
         output = self.trans_conv(x)
         output = self.bn(output)
         output = self.acti(output)
         output = self.regression(output)
+        output = self.out(output)
         return output
 
 

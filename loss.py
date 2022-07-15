@@ -2,7 +2,7 @@
 Author: bin.zhu
 Date: 2022-07-04 14:38:58
 LastEditors: Albin
-LastEditTime: 2022-07-14 18:27:19
+LastEditTime: 2022-07-15 10:45:01
 Description: file content
 '''
 
@@ -20,9 +20,9 @@ class CLSSigmoid(nn.Module):
     def forward(self, input: torch.Tensor, target: torch.Tensor):
         normalizer = float(target.shape[0])
         normalizer = torch.maximum(torch.tensor(1.0), torch.tensor(normalizer))
-        labels = target.reshape(target.shape[0], -1, 1)
-        input = input.reshape(input.shape[0], -1, 1)
-        bce_loss = F.binary_cross_entropy(input, labels, self.weight, reduction="sum")
+        # labels = target.reshape(target.shape[0], -1, 1)
+        # input = input.reshape(input.shape[0], -1, 1)
+        bce_loss = F.binary_cross_entropy(input, target, self.weight, reduction="sum")
         loss = bce_loss / normalizer
         return loss
 
@@ -74,13 +74,13 @@ class HeatmapFocalLoss(nn.Module):
         focal_weight = torch.where(target == 1, (1 - input)**self.alpha,
                                    ((1 - target)**self.beta) *
                                    (input**self.alpha)).detach()
-        labels = torch.reshape(target, [batches, -1, 1])
-        classification = torch.reshape(input, [batches, -1, 1])
+        # labels = torch.reshape(target, [batches, -1, 1])
+        # classification = torch.reshape(input, [batches, -1, 1])
 
         bce_loss = F.binary_cross_entropy(
-            classification,
-            labels,
-            weight=focal_weight.unsqueeze(2),
+            input,
+            target,
+            weight=focal_weight,
             reduction='sum')
         # bce_loss = F.binary_cross_entropy(
         #     classification,
