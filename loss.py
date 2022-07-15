@@ -2,7 +2,7 @@
 Author: bin.zhu
 Date: 2022-07-04 14:38:58
 LastEditors: Albin
-LastEditTime: 2022-07-15 10:45:01
+LastEditTime: 2022-07-15 14:23:00
 Description: file content
 '''
 
@@ -69,8 +69,8 @@ class HeatmapFocalLoss(nn.Module):
         # input1 = torch.reshape(input, (-1, self.num_channels))
         input = torch.reshape(torch.permute(input, (0, 2, 3, 1)),(-1, self.num_channels))
 
-        labels_shape = target.shape
-        batches = labels_shape[0]
+        # labels_shape = target.shape
+        # batches = labels_shape[0]
         focal_weight = torch.where(target == 1, (1 - input)**self.alpha,
                                    ((1 - target)**self.beta) *
                                    (input**self.alpha)).detach()

@@ -2,7 +2,7 @@
 Author: bin.zhu
 Date: 2022-06-28 15:54:40
 LastEditors: Albin
-LastEditTime: 2022-07-15 10:36:43
+LastEditTime: 2022-07-15 15:03:42
 Description: file content
 '''
 
@@ -36,7 +36,7 @@ class PageNet(nn.Module):
         heatmap = self.heatmap(attention)
 
         if self.training:
-            return [cls, reg, heatmap]
+            return cls, reg, heatmap
         else:
             return self.__getOutput(cls, reg, heatmap)
 
